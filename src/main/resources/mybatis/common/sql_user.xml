@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="jp.co.ichain.luigi2.mapper.UserMapper">
+	<select id="getLoginUserAuth" parameterType="UsersVo"  resultType="AuthoritiesVo">
+		SELECT 
+			a.function_id as functionId
+		FROM 
+			authorities a JOIN role_users r
+			ON a.tenant_id=r.tenant_id AND a.role_id=r.role_id
+		WHERE 
+			r.user_id=#{id}
+			AND a.allow_deny=1
+			AND r.avaliable_date &lt; #{lastLoginAt}
+			AND r.unavaliable_date > #{lastLoginAt}
+			AND a.api_yn=1
+	</select>
+	<select id="getApiAuth" parameterType="hashmap"  resultType="AuthoritiesVo">
+		SELECT 
+			a.function_id as functionId
+		FROM 
+			authorities a
+		WHERE 
+			a.tenant_id=#{tenantId}
+			AND a.allow_deny=1
+			AND a.api_yn=1
+			AND a.role_id=#{roleId}
+	</select>
+
+	<update id="updateLoginUser" parameterType="UsersVo">
+		UPDATE 
+			users u
+		SET 
+			u.update_count=u.update_count + 1,
+			u.last_login_at=#{lastLoginAt}
+		WHERE 
+			tenant_id=#{tenantId}
+			AND sub=#{sub}
+		<selectKey keyProperty="id" resultType="UsersVo" order="AFTER">
+			SELECT 
+				id
+			FROM 
+				users
+			WHERE 
+				tenant_id=#{tenantId}
+				AND sub=#{sub}
+		</selectKey>
+	</update>
+	<select id="selectNayoseCustomerMatch"  resultType="NayoseResultVo" parameterType="NayoseRequestVo">
+		SELECT
+			c.tenant_id as tenantId,
+			c.customer_id as customerId,
+			c.updated_at as updatedAt,
+			c.authentication_key as authenticationKey
+		FROM
+			<choose>
+				<when test="corporateIndividualFlag == 2">
+					customers_corporate cc
+						JOIN customers c ON c.customer_id= cc.customer_id
+						AND c.tenant_id=cc.tenant_id 
+					WHERE 
+					cc.corp_name_kana=#{nameKanaSei}
+					AND cc.corp_addr_zip_code=#{addrZipNo}
+				</when>
+				<otherwise>
+					customers_individual ci
+						JOIN customers c ON c.customer_id= ci.customer_id
+						AND c.tenant_id=ci.tenant_id 
+					WHERE 
+					ci.name_kana_sei = #{nameKanaSei}
+					AND ci.name_kana_mei = #{nameKanaMei}
+					AND ci.date_of_birth=#{dateOfBirth}
+					AND ci.addr_zip_code=#{addrZipNo}
+				</otherwise>
+			</choose>
+				AND c.tenant_id=#{tenantId}
+		ORDER BY updatedAt DESC,customerId
+	</select>
+	<select id="selectNayoseCustomerIndividualPartialMatch"  resultType="NayoseResultVo" parameterType="NayoseRequestVo">
+		SELECT
+			tenant_id as tenantId,
+			customer_id as customerId
+		FROM
+			customers_individual
+		WHERE 
+			(name_kana_sei LIKE CONCAT('%',#{nameKanaSei},'%')
+			OR name_kana_mei LIKE CONCAT('%',#{nameKanaMei},'%'))
+			AND tenant_id=#{tenantId}
+		ORDER BY updated_at DESC
+	</select>
+	<select id="getExternalApiTenant"  resultType="TenantsVo" parameterType="String">
+		/* ==NOT_SQL_LOG== */
+		SELECT
+			*
+		FROM
+			tenants
+		WHERE 
+			api_key=#{apiKey}
+		LIMIT 1
+	</select>
+</mapper>

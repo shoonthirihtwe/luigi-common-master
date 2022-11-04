@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="jp.co.ichain.luigi2.mapper.NotificationMapper">
+	<insert id="insertNotification" parameterType="hashmap">
+		INSERT INTO notifications (
+			tenant_id,
+			notification_date,
+			contract_no,
+			contract_branch_no,
+			template_number,
+		    notification_implementation,
+		    comment,
+		    data,
+		    sendee,
+		    notification_method,
+		    email,
+		    error_flag,
+		    email_sender,
+		  	created_by
+		) SELECT distinct
+			#{tenantId},
+			#{notificationDate},
+			#{contractNo},
+			co.contract_branch_no,
+			#{templateNumber},
+			<if test ="notificationImplementation != null">#{notificationImplementation},</if>
+			<if test ="notificationImplementation == null">'0',</if>
+			#{comment},
+			'${data}',
+			<if test ="sendee != null">#{sendee},</if>
+			<if test ="sendee == null">CASE cu.corporate_individual_flag
+				when '1' then concat(cui.name_knj_sei,'　',cui.name_knj_mei)
+				when '2' then cuc.corp_name_official
+				ELSE null END,</if>
+			<if test ="notificationMethod != null">#{notificationMethod},</if>
+			<if test ="notificationMethod == null">'00',</if>
+			<if test ="email != null">#{email},</if>
+			<if test ="email == null">CASE cu.corporate_individual_flag 
+				when '1' then cui.email
+				when '2' then cuc.contact_email
+				ELSE null END,</if>
+			#{errorFlag},
+			#{emailSender},
+			#{updatedBy}
+		FROM contracts co LEFT OUTER JOIN customers cu
+		ON co.tenant_id=cu.tenant_id AND co.contractor_customer_id = cu.customer_id
+		LEFT OUTER JOIN customers_individual cui
+			ON co.tenant_id=cui.tenant_id AND co.contractor_customer_id = cui.customer_id AND cu.corporate_individual_flag='1'
+		LEFT OUTER JOIN customers_corporate cuc
+			ON co.tenant_id=cuc.tenant_id AND co.contractor_customer_id = cuc.customer_id AND cu.corporate_individual_flag='2'
+		WHERE co.tenant_id=#{tenantId} AND co.contract_no='${contractNo}' 
+		<if test ="contractBranchNo != null">AND co.contract_branch_no=#{contractBranchNo}</if>
+		<if test ="contractBranchNo == null">AND co.contract_branch_no=(SELECT max(contract_branch_no) FROM contracts WHERE tenant_id=#{tenantId} AND contract_no='${contractNo}' GROUP BY tenant_id, contract_no)</if>
+	</insert>
+</mapper>

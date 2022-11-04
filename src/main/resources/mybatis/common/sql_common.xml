@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="jp.co.ichain.luigi2.mapper.CommonMapper">	
+	<select id="selectIsExistKey" parameterType="map" resultType="boolean">
+		SELECT 1 FROM ${tableInfo.table} WHERE
+		tenant_id=#{tenantId} AND ${tableInfo.key}=#{data} LIMIT 1
+	</select>
+
+    <select id="selectServiceInstancesBaseData" parameterType="map"
+        resultType="ServiceInstancesVo">
+        SELECT * from service_instances_base_data WHERE status='1'
+        <if test="tenantId != null">AND tenant_id=#{tenantId}</if>
+        <if test="businessGroupType != null">AND (business_group_type='A' OR business_group_type=#{businessGroupType})</if>
+        ORDER BY updated_at DESC
+    </select>
+    
+    <select id="selectServiceInstancesBaseDataBySourceKey" parameterType="map"
+        resultType="ServiceInstancesVo">
+        SELECT * from service_instances_base_data WHERE status='1' AND source_key=#{sourceKey}
+        ORDER BY updated_at DESC
+    </select>
+	
+	<select id="selectCodeMaster" parameterType="map"
+		resultType="CodeMasterVo">
+		SELECT 
+			tenant_id as tenantId,
+			CONCAT(tbl,'-',field) as tbl,
+			code_value as codeValue,
+			code_name as codeName,
+			updated_at as updatedAt,
+			created_at as createdAt
+		FROM code_master 
+		<if test="updatedAt != null">WHERE CASE WHEN updated_at is null THEN created_at ELSE updated_at END > #{updatedAt}</if>
+		ORDER BY updated_at DESC
+	</select>
+
+	<select id="selectLastUpdatedAt" parameterType="map" resultType="java.util.Date">
+		SELECT
+		max(updated_at) from ${table}
+	</select>
+	
+	<select id="selectTenants" parameterType="hashmap" resultType="TenantsVo">
+		SELECT
+			*
+		FROM
+			tenants
+		<where>
+			<if test="updatedAt != null">AND CASE WHEN updated_at is null THEN created_at ELSE updated_at END > #{updatedAt}</if>
+			<if test="id != null">id=#{id}</if>
+			<if test="domain != null">site_url=#{domain}</if>
+		</where>
+		ORDER BY updated_at DESC
+	</select>
+	<select id="selectFactoringCompanyCode" resultType="FactoringCompaniesVo" parameterType="hashmap">
+		SELECT factoring_company_code, site_id, site_pass, shop_id, shop_pass, passbook_entry
+		FROM factoring_companies f
+		WHERE f.deleted_at is null AND tenant_id=#{tenantId} AND 
+			factoring_company_start_date <![CDATA[<= #{nowDate} AND #{nowDate} <=]]> factoring_company_end_date AND
+			factoring_company_code = (
+			SELECT 
+			factoring_company_code
+			FROM policy_holders_pay_method
+			WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND start_date <![CDATA[<= #{nowDate} AND #{nowDate} <= end_date]]> AND status = 'A')
+	</select>
+	<select id="selectOpenDate" resultType="Date" parameterType="hashmap">
+		SELECT
+			date
+		FROM
+			calendars
+		WHERE
+			tenant_id = #{tenantId}
+			AND date > #{date}
+			AND holiday_flag = 0
+		ORDER BY
+			date ASC
+		LIMIT #{count},1
+	</select>
+	
+	<select id="selectSalesProducts" resultType="SalesProductsVo" parameterType="hashmap">
+		SELECT
+			*
+		FROM sales_products
+		WHERE
+			tenant_id = #{tenantId}
+			AND sales_plan_code = #{salesPlanCode}
+			AND sales_plan_type_code = #{salesPlanTypeCode}
+			AND <![CDATA[start_date<=#{issueDate} AND end_date>=#{issueDate}]]>
+		LIMIT 1
+	</select>
+	<select id="selectFunctionId" resultType="java.lang.String">
+		SELECT DISTINCT 
+			function_id 
+		FROM 
+			authorities
+		WHERE 
+			allow_deny=1
+			AND api_yn=1
+	</select>
+	<update id="updateBatchDate" parameterType="hashmap">
+		update 
+			tenants
+		SET
+			batch_date=#{batchDate}
+		<where>
+			<if test="tenantId != null">
+				id IN
+				<foreach collection="tenantId" item="id" index="index" separator="," open="(" close=")">
+        		#{id}
+     			</foreach>
+			</if>
+     	</where>
+	</update>
+	<update id="updateOnlineDate" parameterType="hashmap">
+		update 
+			tenants
+		SET
+			online_date=#{onlineDate}
+		<where>
+			<if test="tenantId != null">
+				id IN
+				<foreach collection="tenantId" item="id" index="index" separator="," open="(" close=")">
+        		#{id}
+     			</foreach>
+			</if>
+     	</where>
+	</update>
+	<select id="selectResourcesLastUpdatedAt" resultType="VoHashMap">
+		SELECT -1 as tenant_id, UNIX_TIMESTAMP(IFNULL(max(updated_at), max(created_at))) *1000 as updated_at
+		FROM tenants
+		UNION ALL
+		SELECT
+			tenant_id
+		    ,UNIX_TIMESTAMP(IFNULL(max(updated_at), max(created_at))) *1000 as updated_at
+		FROM service_instances_base_data
+		GROUP BY tenant_id
+	</select>
+		<select id="selectInherentData" resultType="String" parameterType="hashmap">
+		SELECT 
+			data
+		FROM 
+			service_objects
+		WHERE 
+			tenant_id=#{tenantId}
+			AND contract_no=#{contractNo}
+			AND contract_branch_no=#{contractBranchNo}
+	</select>
+	<update id="updateTableStatus" parameterType="UpdateStatusVo">
+		update 
+			${tableName}
+		SET
+			${columnName}=#{status}
+		WHERE 
+			tenant_id=#{tenantId}
+			AND contract_no=#{contractNo}
+			<if test="contractBranchNo != null">
+			AND contract_branch_no=#{contractBranchNo}
+			</if>
+	</update>
+	<select id="selectSenderEmailsByContractNo" resultType="String" parameterType="map">
+		SELECT REPLACE(JSON_EXTRACT(p.${recieverInfo}, '$.${mailType}'),'"','') as email  
+		FROM  
+			contracts c 
+			join sales_products sp ON sp.sales_plan_code=c.sales_plan_code
+				AND sp.sales_plan_type_code=c.sales_plan_type_code
+    			AND sp.tenant_id=c.tenant_id
+			join products p ON sp.product_code=p.product_code
+				AND p.tenant_id=sp.tenant_id
+		WHERE 
+			c.contract_no=#{param.contractNo}
+			AND c.tenant_id=#{param.tenantId}
+			<if test='param.contractBranchNo != null'>
+			AND c.contract_branch_no=#{param.contractBranchNo}
+			</if>
+		ORDER BY c.contract_branch_no desc
+        LIMIT 1
+	</select>
+</mapper>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="jp.co.ichain.luigi2.mapper.ServiceObjectsMapper">
+	<select id="selectMaxVersion"  resultType="int" parameterType="hashmap">
+		SELECT Ifnull(max(version),1)
+		FROM service_objects
+		WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND contract_branch_no=#{contractBranchNo}
+	</select>
+	<select id="selectServiceObjects" resultType="ServiceObjectsVo" parameterType="hashmap">
+		SELECT * 
+		FROM service_objects
+		WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND contract_branch_no=#{contractBranchNo}
+		<if test="version != null">
+			AND version=#{version}
+		</if>
+	 	<if test="version == null">
+			AND version=1
+		</if>
+		<if test="sequenceNoList != null">
+			AND sequence_no IN<foreach collection="sequenceNoList" item="id" index="index" separator="," open="(" close=")">#{id}</foreach>
+		</if>
+	</select>
+	<insert id="insert" parameterType="hashmap">
+		INSERT INTO service_objects
+			(
+			tenant_id,
+			contract_no,
+			contract_branch_no,
+			sequence_no,
+			data,
+			version
+			)
+		SELECT
+			#{tenantId}, #{contractNo}, #{contractBranchNo}, Ifnull(max(sequence_no),0) + 1, #{data}, #{v}
+		FROM service_objects
+		WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND contract_branch_no=#{contractBranchNo}
+	 	AND version=#{v}
+	</insert>
+	<update id="update" parameterType="hashmap">
+		UPDATE service_objects
+		SET
+			data=#{data}
+		WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND contract_branch_no=#{contractBranchNo}
+		 AND sequence_no=#{sequenceNo} AND version=#{v}
+	</update>
+	<delete id="delete" parameterType="hashmap">
+		DELETE FROM service_objects
+		WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND contract_branch_no=#{contractBranchNo}
+		 AND sequence_no=#{sequenceNo} AND version=#{v}
+	</delete>
+	<delete id="deleteAllSequenceNo" parameterType="hashmap">
+		DELETE FROM service_objects
+		WHERE tenant_id=#{tenantId} AND contract_no=#{contractNo} AND contract_branch_no=#{contractBranchNo}
+		 AND version=#{v}
+	</delete>
+</mapper>
